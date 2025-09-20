@@ -1,0 +1,143 @@
+; Sistema de Semáforos con Secuencia Oscar Zamora Hernandez 22A
+ processor 16F887
+ config FOSC = INTRC_NOCLKOUT
+ config WDTE = OFF
+ config PWRTE = OFF
+ config MCLRE = ON
+ config CP = OFF
+ config CPD = OFF
+ config BOREN = ON
+ config IESO = ON
+ config FCMEN = ON
+ config LVP = OFF
+
+#include <xc.inc>
+
+PSECT resetVec, class=CODE, delta=2
+resetVec:
+    PAGESEL main
+    goto main
+
+PSECT code, delta=2
+main:
+    call    configurar_oscilador
+    call    inicializar_puertos
+    
+bucle_principal:
+    ; --- FASE 1: Norte-Sur VERDE, Este-Oeste ROJO (10s) ---
+    movlw   0b00000101     ; Norte VERDE (RA2=1), Sur VERDE (RA0=1)
+    movwf   PORTA
+    movlw   0b00001001     ; (RB0=1), Oeste ROJO (RB3=1)
+    movwf   PORTB
+    call    delay_10s
+    
+    ; --- FASE 2: Norte-Sur AMARILLO parpadeante, Este-Oeste ROJO (3s) ---
+    movlw   0b00001001     ; Este-Oeste siguen en ROJO
+    movwf   PORTB
+    
+    movlw   6              ; 6 parpadeos (500ms ON/OFF = 3s total)
+    movwf   0x30
+parpadeo_amarillo_ns:
+    ; Encender amarillos Norte-Sur
+    movlw   0b00010010     ; Norte AMARILLO (RA1=1), Sur AMARILLO (RA4=1)
+    movwf   PORTA
+    call    delay_500ms
+    ; Apagar amarillos Norte-Sur
+    movlw   0b00000000
+    movwf   PORTA
+    call    delay_500ms
+    decfsz  0x30, F
+    goto    parpadeo_amarillo_ns
+    
+    ; --- FASE 3: Norte-Sur ROJO, Este-Oeste VERDE (10s) ---
+    movlw   0b00101000     ; Norte ROJO (RA3=1), Sur ROJO (RA5=1)
+    movwf   PORTA
+    movlw   0b00100100     ; Este VERDE (RB2=1), Oeste VERDE (RB5=1)
+    movwf   PORTB
+    call    delay_10s
+    
+    ; --- FASE 4: Este-Oeste AMARILLO parpadeante, Norte-Sur ROJO (3s) ---
+    movlw   0b00101000     ; Norte-Sur siguen en ROJO
+    movwf   PORTA
+    
+    movlw   6              ; 6 parpadeos (500ms ON/OFF = 3s total)
+    movwf   0x30
+parpadeo_amarillo_eo:
+    ; Encender amarillos Este-Oeste
+    movlw   0b00010010     ; Este AMARILLO (RB1=1), Oeste AMARILLO (RB4=1)
+    movwf   PORTB
+    call    delay_500ms
+    ; Apagar amarillos Este-Oeste
+    movlw   0b00000000
+    movwf   PORTB
+    call    delay_500ms
+    decfsz  0x30, F
+    goto    parpadeo_amarillo_eo
+    
+    goto    bucle_principal
+
+; --- RUTINAS DE CONFIGURACIÓN ---
+configurar_oscilador:
+    banksel OSCCON
+    movlw   0b01110000
+    movwf   OSCCON
+    call    delay_estabilizacion
+    return
+
+delay_estabilizacion:
+    movlw   50
+    movwf   0x40
+delay_estab_loop:
+    decfsz  0x40, F
+    goto    delay_estab_loop
+    return
+
+inicializar_puertos:
+    banksel TRISA
+    clrf    TRISA
+    clrf    TRISB
+    banksel ANSEL
+    clrf    ANSEL
+    clrf    ANSELH
+    banksel PORTA
+    clrf    PORTA
+    clrf    PORTB
+    return
+
+; --- RUTINAS DE DELAY ---
+delay_10s:
+    movlw   100
+    movwf   0x20
+delay_10s_outer:
+    call    delay_100ms
+    decfsz  0x20, F
+    goto    delay_10s_outer
+    return
+
+delay_500ms:
+    movlw   5
+    movwf   0x21
+delay_500ms_outer:
+    call    delay_100ms
+    decfsz  0x21, F
+    goto    delay_500ms_outer
+    return
+
+delay_100ms:
+    movlw   200
+    movwf   0x22
+delay_100ms_outer:
+    movlw   165
+    movwf   0x23
+delay_100ms_inner:
+    nop
+    nop
+    nop
+    nop
+    decfsz  0x23, F
+    goto    delay_100ms_inner
+    decfsz  0x22, F
+    goto    delay_100ms_outer
+    return
+
+END
